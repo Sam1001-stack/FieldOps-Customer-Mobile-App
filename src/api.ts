@@ -1,3 +1,4 @@
+/** Authenticated JSON client. Token null = public (CMS, login). */
 import { API_URL } from './config'
 
 export async function api<T = unknown>(

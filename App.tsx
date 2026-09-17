@@ -1,3 +1,7 @@
+/**
+ * FieldOps customer app — register, wait for office verification, create jobs, track status.
+ * API: src/config.ts. CMS: GET /api/v1/content?audience=customer.
+ */
 import { useCallback, useEffect, useState } from 'react'
 import {
   Alert,
@@ -17,6 +21,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage'
 import { SafeAreaProvider, SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { api, unwrapList } from './src/api'
 import { cardShadow, colors, statusTone, tracker, trackerIndex } from './src/theme'
+import { Spinner } from './src/spinner'
 
 type Me = {
   id: string
@@ -213,8 +218,7 @@ function CustomerApp() {
       <SafeAreaView style={styles.screen}>
         <StatusBar barStyle="dark-content" backgroundColor={colors.bg} translucent={false} />
         <View style={styles.center}>
-          <Text style={styles.kicker}>FIELDOPS</Text>
-          <Text style={styles.muted}>Laden…</Text>
+          <Spinner label="Wird geladen…" />
         </View>
       </SafeAreaView>
     )
@@ -265,7 +269,7 @@ function CustomerApp() {
               onPress={mode === 'login' ? login : register}
               disabled={busy}
             >
-              <Text style={styles.ctaText}>{mode === 'login' ? 'Anmelden' : 'Konto anlegen'}</Text>
+              {busy ? <Spinner compact /> : <Text style={styles.ctaText}>{mode === 'login' ? 'Anmelden' : 'Konto anlegen'}</Text>}
             </Pressable>
             <LegalLinks pages={pages} onOpen={openContent} />
           </ScrollView>
@@ -375,8 +379,8 @@ function CustomerApp() {
                     <Chip key={w} label={w} on={jobForm.when === w} onPress={() => setJobForm({ ...jobForm, when: w })} />
                   ))}
                 </View>
-                <Pressable style={[styles.cta, busy && { opacity: 0.6 }]} onPress={createJob} disabled={busy}>
-                  <Text style={styles.ctaText}>Absenden</Text>
+                <Pressable style={[styles.cta, busy && { opacity: 0.85 }]} onPress={createJob} disabled={busy}>
+                  {busy ? <Spinner compact /> : <Text style={styles.ctaText}>Absenden</Text>}
                 </Pressable>
               </>
             )}
@@ -416,6 +420,11 @@ function CustomerApp() {
           <TabItem label="Auftrag" on={tab === 'new'} onPress={() => setTab('new')} />
           <TabItem label="Status" on={tab === 'jobs'} onPress={() => setTab('jobs')} />
           <TabItem label="Post" on={tab === 'alerts'} onPress={() => setTab('alerts')} badge={unread} />
+        </View>
+      )}
+      {busy && (
+        <View style={styles.busyOverlay}>
+          <Spinner label="Bitte warten…" />
         </View>
       )}
     </SafeAreaView>
@@ -612,6 +621,8 @@ const styles = StyleSheet.create({
     marginTop: 18,
     minHeight: 56,
     justifyContent: 'center',
+    flexDirection: 'row',
+    gap: 8,
   },
   ctaText: { color: colors.white, fontWeight: '700', fontSize: 16 },
   ghost: { borderWidth: 1, borderColor: colors.line, borderRadius: 14, paddingVertical: 12, alignItems: 'center', marginTop: 16 },
@@ -672,6 +683,13 @@ const styles = StyleSheet.create({
   tabLabelOn: { color: colors.ink },
   tabBadge: { position: 'absolute', right: 18, top: -2, backgroundColor: colors.rose, borderRadius: 8, minWidth: 16, paddingHorizontal: 4 },
   tabBadgeText: { color: colors.white, fontSize: 9, fontWeight: '700', textAlign: 'center' },
+  busyOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(244,239,230,0.78)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 40,
+  },
   legalWrap: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: 8, marginTop: 20 },
   legalItem: { paddingVertical: 8, paddingHorizontal: 6 },
   legalText: { color: colors.muted, fontSize: 13, fontWeight: '600' },
