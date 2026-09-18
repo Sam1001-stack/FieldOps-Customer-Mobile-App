@@ -36,6 +36,12 @@
 	</dict>
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string></string>
+	<key>NSCameraUsageDescription</key>
+	<string>FieldOps benötigt die Kamera für Schadenfotos zu Ihrem Auftrag.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>FieldOps benötigt Zugriff auf Fotos, um Schadenbilder aus der Galerie hochzuladen.</string>
+	<key>NSPhotoLibraryAddUsageDescription</key>
+	<string>FieldOps speichert optional aufgenommene Schadenfotos in Ihrer Galerie.</string>
 	<key>UILaunchStoryboardName</key>
 	<string>LaunchScreen</string>
 	<key>UIRequiredDeviceCapabilities</key>

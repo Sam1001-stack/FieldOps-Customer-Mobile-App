@@ -43,19 +43,20 @@ export const statusTone: Record<string, { bg: string; fg: string; label: string 
   assigned: { bg: '#E8F0FE', fg: '#1D4ED8', label: 'Geplant' },
   en_route: { bg: '#FFF4D6', fg: '#92400E', label: 'Unterwegs' },
   on_site: { bg: '#EDE9FE', fg: '#6D28D9', label: 'Unterwegs' },
-  waiting_parts: { bg: '#FFEDD5', fg: '#C2410C', label: 'Geplant' },
+  waiting_parts: { bg: '#FFEDD5', fg: '#C2410C', label: 'Teile' },
   completed: { bg: '#D1FAE5', fg: '#047857', label: 'Erledigt' },
   invoiced: { bg: '#D1FAE5', fg: '#047857', label: 'Erledigt' },
   cancelled: { bg: '#F4F4F5', fg: '#71717A', label: 'Storniert' },
 }
 
-export const tracker = ['Gesendet', 'Geplant', 'Unterwegs', 'Erledigt'] as const
+export const tracker = ['Gesendet', 'Geplant', 'Unterwegs', 'Teile', 'Erledigt'] as const
 
 export function trackerIndex(status?: string) {
   if (!status) return 0
-  if (['draft'].includes(status)) return 0
-  if (['scheduled', 'assigned', 'waiting_parts'].includes(status)) return 1
+  if (status === 'draft') return 0
+  if (['scheduled', 'assigned'].includes(status)) return 1
   if (['en_route', 'on_site'].includes(status)) return 2
-  if (['completed', 'invoiced'].includes(status)) return 3
+  if (status === 'waiting_parts') return 3
+  if (['completed', 'invoiced'].includes(status)) return 4
   return 0
 }

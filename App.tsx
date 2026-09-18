@@ -5,7 +5,9 @@
 import { useCallback, useEffect, useState } from 'react'
 import {
   Alert,
+  Image,
   KeyboardAvoidingView,
+  Linking,
   Platform,
   Pressable,
   RefreshControl,
@@ -20,6 +22,7 @@ import {
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import { SafeAreaProvider, SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { api, unwrapList } from './src/api'
+import { pickJobPhoto, photoFormData, type PickedPhoto } from './src/media'
 import { cardShadow, colors, statusTone, tracker, trackerIndex } from './src/theme'
 import { Spinner } from './src/spinner'
 
@@ -45,9 +48,10 @@ type Job = {
   assignees?: { name: string }[]
 }
 
-type Invoice = { id: string; total_cents: number; status_label?: string; number?: string | null }
+type Invoice = { id: string; total_cents: number; status_label?: string; number?: string | null; pdf_url?: string | null }
 type Notice = { id: string; title: string; body: string; unread: boolean; created_at?: string; type_label?: string }
 type ContentPage = { slug: string; title: string; body?: string; audience?: string }
+type OrgOption = { id: string; name: string }
 
 const TOKEN_KEY = 'fieldops.customer.token'
 type Tab = 'home' | 'new' | 'jobs' | 'alerts'
@@ -77,13 +81,23 @@ function CustomerApp() {
   const [street, setStreet] = useState('')
   const [zip, setZip] = useState('')
   const [city, setCity] = useState('Frankfurt am Main')
+  const [orgs, setOrgs] = useState<OrgOption[]>([])
+  const [organizationId, setOrganizationId] = useState('')
 
   const [step, setStep] = useState(1)
   const [jobForm, setJobForm] = useState({ title: '', description: '', street: '', when: 'Vormittag', urgency: 'normal' as 'normal' | 'notdienst' })
+  const [schadenPhoto, setSchadenPhoto] = useState<PickedPhoto | null>(null)
 
   const loadPages = useCallback(async () => {
     const list = await api<ContentPage[]>('/api/v1/content?audience=customer', null).catch(() => [])
     setPages(Array.isArray(list) ? list : [])
+  }, [])
+
+  const loadOrgs = useCallback(async () => {
+    const list = await api<OrgOption[]>('/api/v1/organizations', null).catch(() => [])
+    const options = Array.isArray(list) ? list : []
+    setOrgs(options)
+    if (options.length === 1) setOrganizationId(options[0].id)
   }, [])
 
   const openContent = async (slug: string) => {
@@ -110,6 +124,7 @@ function CustomerApp() {
 
   useEffect(() => {
     void loadPages()
+    void loadOrgs()
     AsyncStorage.getItem(TOKEN_KEY).then(async t => {
       if (t) {
         setToken(t)
@@ -122,7 +137,7 @@ function CustomerApp() {
       }
       setBooting(false)
     })
-  }, [load, loadPages])
+  }, [load, loadPages, loadOrgs])
 
   const persist = async (next: string, user?: Me) => {
     await AsyncStorage.setItem(TOKEN_KEY, next)
@@ -147,11 +162,15 @@ function CustomerApp() {
   }
 
   const register = async () => {
+    if (!organizationId) {
+      Alert.alert('Registrierung', 'Bitte wählen Sie Ihren Handwerksbetrieb.')
+      return
+    }
     setBusy(true)
     try {
       const r = await api<{ token: string; user: Me }>('/api/v1/auth/register', null, {
         method: 'POST',
-        body: JSON.stringify({ name, email, password, phone, street, zip, city }),
+        body: JSON.stringify({ name, email, password, phone, street, zip, city, organization_id: organizationId }),
       })
       await persist(r.token, r.user)
       setTab('home')
@@ -184,7 +203,7 @@ function CustomerApp() {
     if (!token) return
     setBusy(true)
     try {
-      await api('/api/v1/jobs', token, {
+      const created = await api<{ id: string }>('/api/v1/jobs', token, {
         method: 'POST',
         body: JSON.stringify({
           title: jobForm.title || jobForm.description || 'Serviceanfrage',
@@ -195,16 +214,29 @@ function CustomerApp() {
           city,
         }),
       })
+      const hadPhoto = Boolean(schadenPhoto)
+      if (schadenPhoto && created?.id) {
+        await api(`/api/v1/jobs/${created.id}/photos`, token, {
+          method: 'POST',
+          body: photoFormData(schadenPhoto, 'before'),
+        })
+      }
       setStep(1)
+      setSchadenPhoto(null)
       setJobForm({ title: '', description: '', street: jobForm.street, when: 'Vormittag', urgency: 'normal' })
       setTab('jobs')
       await load(token)
-      Alert.alert('Gesendet', 'Das Büro hat Ihre Anfrage erhalten.')
+      Alert.alert('Gesendet', hadPhoto ? 'Auftrag und Schadenfoto sind beim Büro.' : 'Das Büro hat Ihre Anfrage erhalten.')
     } catch (e) {
       Alert.alert('Auftrag', e instanceof Error ? e.message : 'Fehler')
     } finally {
       setBusy(false)
     }
+  }
+
+  const attachSchadenPhoto = async () => {
+    const picked = await pickJobPhoto()
+    if (picked) setSchadenPhoto(picked)
   }
 
   const markNotice = async (id: string) => {
@@ -247,6 +279,21 @@ function CustomerApp() {
             </View>
             {mode === 'register' && (
               <>
+                <Text style={styles.label}>Handwerksbetrieb</Text>
+                {orgs.length === 0 && (
+                  <Text style={styles.muted}>Kein Betrieb verfügbar. Bitte später erneut versuchen.</Text>
+                )}
+                <View style={{ gap: 8, marginBottom: 8 }}>
+                  {orgs.map(org => (
+                    <Pressable
+                      key={org.id}
+                      style={[styles.card, organizationId === org.id && { borderColor: colors.navy, borderWidth: 2 }]}
+                      onPress={() => setOrganizationId(org.id)}
+                    >
+                      <Text style={styles.cardTitle}>{org.name}</Text>
+                    </Pressable>
+                  ))}
+                </View>
                 <Field label="Name" value={name} onChange={setName} />
                 <Field label="Telefon" value={phone} onChange={setPhone} keyboard="phone-pad" />
                 <Field label="Straße" value={street} onChange={setStreet} />
@@ -334,10 +381,20 @@ function CustomerApp() {
             </Pressable>
             <Text style={styles.h2}>Rechnungen</Text>
             {invoices.slice(0, 3).map(inv => (
-              <View key={inv.id} style={styles.card}>
+              <Pressable
+                key={inv.id}
+                style={styles.card}
+                onPress={() => {
+                  if (inv.pdf_url) {
+                    void Linking.openURL(inv.pdf_url).catch(() => Alert.alert('Rechnung', 'PDF konnte nicht geöffnet werden.'))
+                  } else {
+                    Alert.alert('Rechnung', 'Für diese Rechnung liegt noch kein PDF vor.')
+                  }
+                }}
+              >
                 <Text style={styles.amount}>{(inv.total_cents / 100).toFixed(2).replace('.', ',')} €</Text>
-                <Text style={styles.muted}>{inv.status_label} · {inv.number || 'Offen'}</Text>
-              </View>
+                <Text style={styles.muted}>{inv.status_label} · {inv.number || 'Offen'}{inv.pdf_url ? ' · PDF öffnen' : ''}</Text>
+              </Pressable>
             ))}
             {invoices.length === 0 && <Text style={styles.muted}>Noch keine Rechnungen.</Text>}
             <Text style={styles.h2}>Informationen</Text>
@@ -379,6 +436,42 @@ function CustomerApp() {
                     <Chip key={w} label={w} on={jobForm.when === w} onPress={() => setJobForm({ ...jobForm, when: w })} />
                   ))}
                 </View>
+                <Text style={[styles.label, { marginTop: 16 }]}>Schadenfoto (optional)</Text>
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel="Schadenfoto aufnehmen oder auswählen"
+                  onPress={attachSchadenPhoto}
+                  style={({ pressed }) => [
+                    styles.photoDrop,
+                    compact && { minHeight: 132 },
+                    schadenPhoto && styles.photoDropOn,
+                    pressed && { opacity: 0.92, borderColor: colors.navy },
+                  ]}
+                >
+                  {schadenPhoto ? (
+                    <>
+                      <Image source={{ uri: schadenPhoto.uri }} style={styles.photoPreview} resizeMode="cover" />
+                      <View style={styles.photoDropBar}>
+                        <Pressable style={{ flex: 1 }} onPress={attachSchadenPhoto} hitSlop={4}>
+                          <Text style={styles.photoDropBarText} numberOfLines={1}>
+                            Foto bereit · Tippen zum Ändern
+                          </Text>
+                        </Pressable>
+                        <Pressable hitSlop={10} onPress={() => setSchadenPhoto(null)} style={styles.photoClear}>
+                          <Text style={styles.photoClearText}>Entfernen</Text>
+                        </Pressable>
+                      </View>
+                    </>
+                  ) : (
+                    <View style={styles.photoDropEmpty}>
+                      <View style={styles.photoRing}>
+                        <View style={styles.photoDot} />
+                      </View>
+                      <Text style={styles.photoDropTitle}>Kamera oder Galerie</Text>
+                      <Text style={styles.photoDropSub}>Hilft dem Büro, den Schaden schneller zu planen</Text>
+                    </View>
+                  )}
+                </Pressable>
                 <Pressable style={[styles.cta, busy && { opacity: 0.85 }]} onPress={createJob} disabled={busy}>
                   {busy ? <Spinner compact /> : <Text style={styles.ctaText}>Absenden</Text>}
                 </Pressable>
@@ -627,6 +720,47 @@ const styles = StyleSheet.create({
   ctaText: { color: colors.white, fontWeight: '700', fontSize: 16 },
   ghost: { borderWidth: 1, borderColor: colors.line, borderRadius: 14, paddingVertical: 12, alignItems: 'center', marginTop: 16 },
   ghostText: { color: colors.navy, fontWeight: '700' },
+  photoDrop: {
+    marginTop: 4,
+    minHeight: 148,
+    borderRadius: 20,
+    borderWidth: 1.5,
+    borderColor: colors.line,
+    borderStyle: 'dashed',
+    backgroundColor: colors.white,
+    overflow: 'hidden',
+    ...cardShadow,
+  },
+  photoDropOn: { borderStyle: 'solid', borderColor: colors.navy },
+  photoDropEmpty: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingVertical: 28, paddingHorizontal: 20, gap: 8 },
+  photoRing: {
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+    borderWidth: 2,
+    borderColor: colors.gold,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 4,
+  },
+  photoDot: { width: 14, height: 14, borderRadius: 7, backgroundColor: colors.gold },
+  photoDropTitle: { color: colors.ink, fontWeight: '700', fontSize: 15 },
+  photoDropSub: { color: colors.muted, fontSize: 13, textAlign: 'center', lineHeight: 18 },
+  photoPreview: { width: '100%', height: 168 },
+  photoDropBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    backgroundColor: colors.surface,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: colors.line,
+  },
+  photoDropBarText: { flex: 1, color: colors.ink, fontWeight: '600', fontSize: 13 },
+  photoClear: { paddingVertical: 4, paddingHorizontal: 8 },
+  photoClearText: { color: colors.rose, fontWeight: '700', fontSize: 13 },
   topBar: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 18 },
   link: { color: colors.navy, fontWeight: '600' },
   waitCard: {

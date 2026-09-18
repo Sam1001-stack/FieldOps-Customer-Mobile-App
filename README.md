@@ -25,6 +25,6 @@ npm run android
 # iOS: npm run ios
 ```
 
-Login: `james.b@example.com` / `FieldOps!2026`.
+Login: register in-app (pick Betrieb) or use a LIVE verified customer. Seed README emails may be absent on LIVE.
 
 Physical device against local API: set `USE_LOCAL_API` and replace the host with your machine LAN IP.
