@@ -7,7 +7,7 @@ React Native CLI app for end customers (`de.fieldops.customer`). Warm paper UI. 
 ```
 App.tsx           Register, wait-for-office, jobs, invoices, notices, CMS pages
 src/api.ts        fetch to /api/v1 with Bearer token
-src/config.ts     Android emulator 10.0.2.2, iOS 127.0.0.1
+src/config.ts     Live API; `USE_LOCAL_API` for emulator/simulator
 src/theme.ts      Customer colors + 4-step tracker
 ```
 
@@ -27,4 +27,4 @@ npm run android
 
 Login: `james.b@example.com` / `FieldOps!2026`.
 
-Physical device: set `API_URL` in `src/config.ts` to your machine LAN IP.
+Physical device against local API: set `USE_LOCAL_API` and replace the host with your machine LAN IP.
